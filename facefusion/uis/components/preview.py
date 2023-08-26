@@ -8,7 +8,7 @@ from facefusion import wording
 from facefusion.capturer import get_video_frame, get_video_frame_total
 from facefusion.face_analyser import get_one_face
 from facefusion.face_reference import get_face_reference, set_face_reference
-from facefusion.predictor import predict_frame
+# from facefusion.predictor import predict_frame
 from facefusion.processors.frame.core import load_frame_processor_module
 from facefusion.typing import Frame
 from facefusion.uis import core as ui
@@ -92,8 +92,8 @@ def update(frame_number : int = 0) -> Tuple[Update, Update]:
 
 
 def extract_preview_frame(temp_frame : Frame) -> Frame:
-	if predict_frame(temp_frame):
-		return cv2.GaussianBlur(temp_frame, (99, 99), 0)
+	# if predict_frame(temp_frame):
+	# 	return cv2.GaussianBlur(temp_frame, (99, 99), 0)
 	source_face = get_one_face(cv2.imread(facefusion.globals.source_path)) if facefusion.globals.source_path else None
 	temp_frame = reduce_preview_frame(temp_frame)
 	if 'reference' in facefusion.globals.face_recognition and not get_face_reference():

@@ -18,7 +18,7 @@ import tensorflow
 import facefusion.choices
 import facefusion.globals
 from facefusion import wording, metadata
-from facefusion.predictor import predict_image, predict_video
+# from facefusion.predictor import predict_image, predict_video
 from facefusion.processors.frame.core import get_frame_processors_modules
 from facefusion.utilities import is_image, is_video, detect_fps, create_video, extract_frames, get_temp_frame_paths, restore_audio, create_temp, move_temp, clear_temp, normalize_output_path, list_module_names, decode_execution_providers, encode_execution_providers
 
@@ -132,8 +132,8 @@ def pre_check() -> bool:
 
 
 def process_image() -> None:
-	if predict_image(facefusion.globals.target_path):
-		return
+	# if predict_image(facefusion.globals.target_path):
+	# 	return
 	shutil.copy2(facefusion.globals.target_path, facefusion.globals.output_path)
 	# process frame
 	for frame_processor_module in get_frame_processors_modules(facefusion.globals.frame_processors):
@@ -148,8 +148,8 @@ def process_image() -> None:
 
 
 def process_video() -> None:
-	if predict_video(facefusion.globals.target_path):
-		return
+	# if predict_video(facefusion.globals.target_path):
+	# 	return
 	fps = detect_fps(facefusion.globals.target_path) if facefusion.globals.keep_fps else 25.0
 	update_status(wording.get('creating_temp'))
 	create_temp(facefusion.globals.target_path)
