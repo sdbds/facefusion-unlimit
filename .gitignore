@@ -1,4 +1,6 @@
 .assets
 .idea
 .vscode
-
+*.pyc
+venv/
+gfpgan/
