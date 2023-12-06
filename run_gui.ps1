@@ -1,4 +1,3 @@
-$execution_provider="cuda"
 $execution_thread_count=128
 $execution_queue_count=8
 $temp_frame_quality=100
@@ -24,7 +23,6 @@ python.exe run.py `
 --frame-processor face_swapper face_enhancer `
 --keep-fps `
 --keep-temp `
---execution-provider=$execution_provider `
 --execution-queue-count=$execution_queue_count `
 --execution-thread-count=$execution_thread_count `
 --temp-frame-quality=$temp_frame_quality `
