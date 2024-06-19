@@ -55,6 +55,7 @@ WORDING : Dict[str, Any] =\
 		'install_dependency': 'select the variant of {dependency} to install',
 		'skip_conda': 'skip the conda environment check',
 		# general
+		'config': 'choose the config file to override defaults',
 		'source': 'choose single or multiple source images or audios',
 		'target': 'choose single target image or video',
 		'output': 'specify the output file or directory',
@@ -64,6 +65,7 @@ WORDING : Dict[str, Any] =\
 		'headless': 'run the program without a user interface',
 		'log_level': 'adjust the message severity displayed in the terminal',
 		# execution
+		'execution_device_id': 'specify the device used for processing',
 		'execution_providers': 'accelerate the model inference using different providers (choices: {choices}, ...)',
 		'execution_thread_count': 'specify the amount of parallel threads while processing',
 		'execution_queue_count': 'specify the amount of frames each thread is processing',
@@ -110,10 +112,12 @@ WORDING : Dict[str, Any] =\
 		'face_swapper_model': 'choose the model responsible for swapping the face',
 		'frame_colorizer_model': 'choose the model responsible for colorizing the frame',
 		'frame_colorizer_blend': 'blend the colorized into the previous frame',
+		'frame_colorizer_size': 'specify the size of the frame provided to the frame colorizer',
 		'frame_enhancer_model': 'choose the model responsible for enhancing the frame',
 		'frame_enhancer_blend': 'blend the enhanced into the previous frame',
 		'lip_syncer_model': 'choose the model responsible for syncing the lips',
 		# uis
+		'open_browser': 'open the browser once the program is ready',
 		'ui_layouts': 'launch a single or multiple UI layouts (choices: {choices}, ...)'
 	},
 	'uis':
@@ -166,6 +170,7 @@ WORDING : Dict[str, Any] =\
 		'face_swapper_model_dropdown': 'FACE SWAPPER MODEL',
 		'frame_colorizer_model_dropdown': 'FRAME COLORIZER MODEL',
 		'frame_colorizer_blend_slider': 'FRAME COLORIZER BLEND',
+		'frame_colorizer_size_dropdown': 'FRAME COLORIZER SIZE',
 		'frame_enhancer_model_dropdown': 'FRAME ENHANCER MODEL',
 		'frame_enhancer_blend_slider': 'FRAME ENHANCER BLEND',
 		'lip_syncer_model_dropdown': 'LIP SYNCER MODEL',

@@ -1,7 +1,6 @@
 from typing import Any, List, Literal, Optional
 from argparse import ArgumentParser
 from time import sleep
-import threading
 import cv2
 import numpy
 import onnxruntime
@@ -13,6 +12,7 @@ from facefusion.face_analyser import clear_face_analyser
 from facefusion.content_analyser import clear_content_analyser
 from facefusion.execution import apply_execution_provider_options
 from facefusion.normalizer import normalize_output_path
+from facefusion.thread_helper import thread_lock, conditional_thread_semaphore
 from facefusion.typing import Face, VisionFrame, UpdateProgress, ProcessMode, ModelSet, OptionsWithModel, QueuePayload
 from facefusion.common_helper import create_metavar
 from facefusion.filesystem import is_file, resolve_relative_path, is_image, is_video
@@ -23,64 +23,77 @@ from facefusion.processors.frame import globals as frame_processors_globals
 from facefusion.processors.frame import choices as frame_processors_choices
 
 FRAME_PROCESSOR = None
-THREAD_LOCK : threading.Lock = threading.Lock()
 NAME = __name__.upper()
 MODELS : ModelSet =\
 {
+	'clear_reality_x4':
+	{
+		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/clear_reality_x4.onnx',
+		'path': resolve_relative_path('../.assets/models/clear_reality_x4.onnx'),
+		'size': (128, 8, 4),
+		'scale': 4
+	},
 	'lsdir_x4':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/lsdir_x4.onnx',
 		'path': resolve_relative_path('../.assets/models/lsdir_x4.onnx'),
-		'size': (128, 8, 2),
+		'size': (128, 8, 4),
 		'scale': 4
 	},
 	'nomos8k_sc_x4':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/nomos8k_sc_x4.onnx',
 		'path': resolve_relative_path('../.assets/models/nomos8k_sc_x4.onnx'),
-		'size': (128, 8, 2),
+		'size': (128, 8, 4),
 		'scale': 4
 	},
 	'real_esrgan_x2':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/real_esrgan_x2.onnx',
 		'path': resolve_relative_path('../.assets/models/real_esrgan_x2.onnx'),
-		'size': (128, 8, 2),
+		'size': (256, 16, 8),
 		'scale': 2
 	},
 	'real_esrgan_x2_fp16':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/real_esrgan_x2_fp16.onnx',
 		'path': resolve_relative_path('../.assets/models/real_esrgan_x2_fp16.onnx'),
-		'size': (128, 8, 2),
+		'size': (256, 16, 8),
 		'scale': 2
 	},
 	'real_esrgan_x4':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/real_esrgan_x4.onnx',
 		'path': resolve_relative_path('../.assets/models/real_esrgan_x4.onnx'),
-		'size': (128, 8, 2),
+		'size': (256, 16, 8),
 		'scale': 4
 	},
 	'real_esrgan_x4_fp16':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/real_esrgan_x4_fp16.onnx',
 		'path': resolve_relative_path('../.assets/models/real_esrgan_x4_fp16.onnx'),
-		'size': (128, 8, 2),
+		'size': (256, 16, 8),
 		'scale': 4
 	},
 	'real_hatgan_x4':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/real_hatgan_x4.onnx',
 		'path': resolve_relative_path('../.assets/models/real_hatgan_x4.onnx'),
-		'size': (256, 8, 2),
+		'size': (256, 16, 8),
 		'scale': 4
 	},
 	'span_kendata_x4':
 	{
 		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/span_kendata_x4.onnx',
 		'path': resolve_relative_path('../.assets/models/span_kendata_x4.onnx'),
-		'size': (128, 8, 2),
+		'size': (128, 8, 4),
+		'scale': 4
+	},
+	'ultra_sharp_x4':
+	{
+		'url': 'https://github.com/facefusion/facefusion-assets/releases/download/models/ultra_sharp_x4.onnx',
+		'path': resolve_relative_path('../.assets/models/ultra_sharp_x4.onnx'),
+		'size': (128, 8, 4),
 		'scale': 4
 	}
 }
@@ -90,12 +103,12 @@ OPTIONS : Optional[OptionsWithModel] = None
 def get_frame_processor() -> Any:
 	global FRAME_PROCESSOR
 
-	with THREAD_LOCK:
+	with thread_lock():
 		while process_manager.is_checking():
 			sleep(0.5)
 		if FRAME_PROCESSOR is None:
 			model_path = get_options('model').get('path')
-			FRAME_PROCESSOR = onnxruntime.InferenceSession(model_path, providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+			FRAME_PROCESSOR = onnxruntime.InferenceSession(model_path, providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 	return FRAME_PROCESSOR
 
 
@@ -185,10 +198,11 @@ def enhance_frame(temp_vision_frame : VisionFrame) -> VisionFrame:
 	tile_vision_frames, pad_width, pad_height = create_tile_frames(temp_vision_frame, size)
 
 	for index, tile_vision_frame in enumerate(tile_vision_frames):
-		tile_vision_frame = frame_processor.run(None,
-		{
-			frame_processor.get_inputs()[0].name : prepare_tile_frame(tile_vision_frame)
-		})[0]
+		with conditional_thread_semaphore(facefusion.globals.execution_providers):
+			tile_vision_frame = frame_processor.run(None,
+			{
+				frame_processor.get_inputs()[0].name : prepare_tile_frame(tile_vision_frame)
+			})[0]
 		tile_vision_frames[index] = normalize_tile_frame(tile_vision_frame)
 	merge_vision_frame = merge_tile_frames(tile_vision_frames, temp_width * scale, temp_height * scale, pad_width * scale, pad_height * scale, (size[0] * scale, size[1] * scale, size[2] * scale))
 	temp_vision_frame = blend_frame(temp_vision_frame, merge_vision_frame)

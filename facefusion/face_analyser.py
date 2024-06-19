@@ -1,6 +1,5 @@
 from typing import Any, Optional, List, Tuple
 from time import sleep
-import threading
 import cv2
 import numpy
 import onnxruntime
@@ -13,12 +12,11 @@ from facefusion.face_store import get_static_faces, set_static_faces
 from facefusion.execution import apply_execution_provider_options
 from facefusion.download import conditional_download
 from facefusion.filesystem import resolve_relative_path, is_file
+from facefusion.thread_helper import thread_lock, thread_semaphore, conditional_thread_semaphore
 from facefusion.typing import VisionFrame, Face, FaceSet, FaceAnalyserOrder, FaceAnalyserAge, FaceAnalyserGender, ModelSet, BoundingBox, FaceLandmarkSet, FaceLandmark5, FaceLandmark68, Score, FaceScoreSet, Embedding
 from facefusion.vision import resize_frame_resolution, unpack_resolution
 
 FACE_ANALYSER = None
-THREAD_SEMAPHORE : threading.Semaphore = threading.Semaphore()
-THREAD_LOCK : threading.Lock = threading.Lock()
 MODELS : ModelSet =\
 {
 	'face_detector_retinaface':
@@ -85,29 +83,29 @@ def get_face_analyser() -> Any:
 	face_detectors = {}
 	face_landmarkers = {}
 
-	with THREAD_LOCK:
+	with thread_lock():
 		while process_manager.is_checking():
 			sleep(0.5)
 		if FACE_ANALYSER is None:
 			if facefusion.globals.face_detector_model in [ 'many', 'retinaface' ]:
-				face_detectors['retinaface'] = onnxruntime.InferenceSession(MODELS.get('face_detector_retinaface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_detectors['retinaface'] = onnxruntime.InferenceSession(MODELS.get('face_detector_retinaface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_detector_model in [ 'many', 'scrfd' ]:
-				face_detectors['scrfd'] = onnxruntime.InferenceSession(MODELS.get('face_detector_scrfd').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_detectors['scrfd'] = onnxruntime.InferenceSession(MODELS.get('face_detector_scrfd').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_detector_model in [ 'many', 'yoloface' ]:
-				face_detectors['yoloface'] = onnxruntime.InferenceSession(MODELS.get('face_detector_yoloface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_detectors['yoloface'] = onnxruntime.InferenceSession(MODELS.get('face_detector_yoloface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_detector_model in [ 'yunet' ]:
 				face_detectors['yunet'] = cv2.FaceDetectorYN.create(MODELS.get('face_detector_yunet').get('path'), '', (0, 0))
 			if facefusion.globals.face_recognizer_model == 'arcface_blendswap':
-				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_blendswap').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_blendswap').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_recognizer_model == 'arcface_inswapper':
-				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_inswapper').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_inswapper').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_recognizer_model == 'arcface_simswap':
-				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_simswap').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_simswap').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			if facefusion.globals.face_recognizer_model == 'arcface_uniface':
-				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_uniface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
-			face_landmarkers['68'] = onnxruntime.InferenceSession(MODELS.get('face_landmarker_68').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
-			face_landmarkers['68_5'] = onnxruntime.InferenceSession(MODELS.get('face_landmarker_68_5').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
-			gender_age = onnxruntime.InferenceSession(MODELS.get('gender_age').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+				face_recognizer = onnxruntime.InferenceSession(MODELS.get('face_recognizer_arcface_uniface').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
+			face_landmarkers['68'] = onnxruntime.InferenceSession(MODELS.get('face_landmarker_68').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
+			face_landmarkers['68_5'] = onnxruntime.InferenceSession(MODELS.get('face_landmarker_68_5').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
+			gender_age = onnxruntime.InferenceSession(MODELS.get('gender_age').get('path'), providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 			FACE_ANALYSER =\
 			{
 				'face_detectors': face_detectors,
@@ -185,7 +183,7 @@ def detect_with_retinaface(vision_frame : VisionFrame, face_detector_size : str)
 	score_list = []
 
 	detect_vision_frame = prepare_detect_frame(temp_vision_frame, face_detector_size)
-	with THREAD_SEMAPHORE:
+	with thread_semaphore():
 		detections = face_detector.run(None,
 		{
 			face_detector.get_inputs()[0].name: detect_vision_frame
@@ -227,7 +225,7 @@ def detect_with_scrfd(vision_frame : VisionFrame, face_detector_size : str) -> T
 	score_list = []
 
 	detect_vision_frame = prepare_detect_frame(temp_vision_frame, face_detector_size)
-	with THREAD_SEMAPHORE:
+	with thread_semaphore():
 		detections = face_detector.run(None,
 		{
 			face_detector.get_inputs()[0].name: detect_vision_frame
@@ -266,7 +264,7 @@ def detect_with_yoloface(vision_frame : VisionFrame, face_detector_size : str) -
 	score_list = []
 
 	detect_vision_frame = prepare_detect_frame(temp_vision_frame, face_detector_size)
-	with THREAD_SEMAPHORE:
+	with thread_semaphore():
 		detections = face_detector.run(None,
 		{
 			face_detector.get_inputs()[0].name: detect_vision_frame
@@ -304,7 +302,7 @@ def detect_with_yunet(vision_frame : VisionFrame, face_detector_size : str) -> T
 
 	face_detector.setInputSize((temp_vision_frame.shape[1], temp_vision_frame.shape[0]))
 	face_detector.setScoreThreshold(facefusion.globals.face_detector_score)
-	with THREAD_SEMAPHORE:
+	with thread_semaphore():
 		_, detections = face_detector.detect(temp_vision_frame)
 	if numpy.any(detections):
 		for detection in detections:
@@ -380,10 +378,11 @@ def calc_embedding(temp_vision_frame : VisionFrame, face_landmark_5 : FaceLandma
 	crop_vision_frame = crop_vision_frame / 127.5 - 1
 	crop_vision_frame = crop_vision_frame[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32)
 	crop_vision_frame = numpy.expand_dims(crop_vision_frame, axis = 0)
-	embedding = face_recognizer.run(None,
-	{
-		face_recognizer.get_inputs()[0].name: crop_vision_frame
-	})[0]
+	with conditional_thread_semaphore(facefusion.globals.execution_providers):
+		embedding = face_recognizer.run(None,
+		{
+			face_recognizer.get_inputs()[0].name: crop_vision_frame
+		})[0]
 	embedding = embedding.ravel()
 	normed_embedding = embedding / numpy.linalg.norm(embedding)
 	return embedding, normed_embedding
@@ -399,10 +398,11 @@ def detect_face_landmark_68(temp_vision_frame : VisionFrame, bounding_box : Boun
 		crop_vision_frame[:, :, 0] = cv2.createCLAHE(clipLimit = 2).apply(crop_vision_frame[:, :, 0])
 	crop_vision_frame = cv2.cvtColor(crop_vision_frame, cv2.COLOR_Lab2RGB)
 	crop_vision_frame = crop_vision_frame.transpose(2, 0, 1).astype(numpy.float32) / 255.0
-	face_landmark_68, face_heatmap = face_landmarker.run(None,
-	{
-		face_landmarker.get_inputs()[0].name: [ crop_vision_frame ]
-	})
+	with conditional_thread_semaphore(facefusion.globals.execution_providers):
+		face_landmark_68, face_heatmap = face_landmarker.run(None,
+		{
+			face_landmarker.get_inputs()[0].name: [ crop_vision_frame ]
+		})
 	face_landmark_68 = face_landmark_68[:, :, :2][0] / 64
 	face_landmark_68 = face_landmark_68.reshape(1, -1, 2) * 256
 	face_landmark_68 = cv2.transform(face_landmark_68, cv2.invertAffineTransform(affine_matrix))
@@ -416,10 +416,11 @@ def expand_face_landmark_68_from_5(face_landmark_5 : FaceLandmark5) -> FaceLandm
 	face_landmarker = get_face_analyser().get('face_landmarkers').get('68_5')
 	affine_matrix = estimate_matrix_by_face_landmark_5(face_landmark_5, 'ffhq_512', (1, 1))
 	face_landmark_5 = cv2.transform(face_landmark_5.reshape(1, -1, 2), affine_matrix).reshape(-1, 2)
-	face_landmark_68_5 = face_landmarker.run(None,
-	{
-		face_landmarker.get_inputs()[0].name: [ face_landmark_5 ]
-	})[0][0]
+	with conditional_thread_semaphore(facefusion.globals.execution_providers):
+		face_landmark_68_5 = face_landmarker.run(None,
+		{
+			face_landmarker.get_inputs()[0].name: [ face_landmark_5 ]
+		})[0][0]
 	face_landmark_68_5 = cv2.transform(face_landmark_68_5.reshape(1, -1, 2), cv2.invertAffineTransform(affine_matrix)).reshape(-1, 2)
 	return face_landmark_68_5
 
@@ -432,10 +433,11 @@ def detect_gender_age(temp_vision_frame : VisionFrame, bounding_box : BoundingBo
 	crop_vision_frame, affine_matrix = warp_face_by_translation(temp_vision_frame, translation, scale, (96, 96))
 	crop_vision_frame = crop_vision_frame[:, :, ::-1].transpose(2, 0, 1).astype(numpy.float32)
 	crop_vision_frame = numpy.expand_dims(crop_vision_frame, axis = 0)
-	prediction = gender_age.run(None,
-	{
-		gender_age.get_inputs()[0].name: crop_vision_frame
-	})[0][0]
+	with conditional_thread_semaphore(facefusion.globals.execution_providers):
+		prediction = gender_age.run(None,
+		{
+			gender_age.get_inputs()[0].name: crop_vision_frame
+		})[0][0]
 	gender = int(numpy.argmax(prediction[:2]))
 	age = int(numpy.round(prediction[2] * 100))
 	return gender, age

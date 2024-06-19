@@ -1,8 +1,6 @@
 from typing import Any, List, Literal, Optional
 from argparse import ArgumentParser
 from time import sleep
-import platform
-import threading
 import numpy
 import onnx
 import onnxruntime
@@ -11,13 +9,14 @@ from onnx import numpy_helper
 import facefusion.globals
 import facefusion.processors.frame.core as frame_processors
 from facefusion import config, process_manager, logger, wording
-from facefusion.execution import apply_execution_provider_options
+from facefusion.execution import has_execution_provider, apply_execution_provider_options
 from facefusion.face_analyser import get_one_face, get_average_face, get_many_faces, find_similar_faces, clear_face_analyser
 from facefusion.face_masker import create_static_box_mask, create_occlusion_mask, create_region_mask, clear_face_occluder, clear_face_parser
 from facefusion.face_helper import warp_face_by_face_landmark_5, paste_back
 from facefusion.face_store import get_reference_faces
 from facefusion.content_analyser import clear_content_analyser
 from facefusion.normalizer import normalize_output_path
+from facefusion.thread_helper import thread_lock, conditional_thread_semaphore
 from facefusion.typing import Face, Embedding, VisionFrame, UpdateProgress, ProcessMode, ModelSet, OptionsWithModel, QueuePayload
 from facefusion.filesystem import is_file, is_image, has_image, is_video, filter_image_paths, resolve_relative_path
 from facefusion.download import conditional_download, is_download_done
@@ -28,7 +27,6 @@ from facefusion.processors.frame import choices as frame_processors_choices
 
 FRAME_PROCESSOR = None
 MODEL_INITIALIZER = None
-THREAD_LOCK : threading.Lock = threading.Lock()
 NAME = __name__.upper()
 MODELS : ModelSet =\
 {
@@ -99,12 +97,12 @@ OPTIONS : Optional[OptionsWithModel] = None
 def get_frame_processor() -> Any:
 	global FRAME_PROCESSOR
 
-	with THREAD_LOCK:
+	with thread_lock():
 		while process_manager.is_checking():
 			sleep(0.5)
 		if FRAME_PROCESSOR is None:
 			model_path = get_options('model').get('path')
-			FRAME_PROCESSOR = onnxruntime.InferenceSession(model_path, providers = apply_execution_provider_options(facefusion.globals.execution_providers))
+			FRAME_PROCESSOR = onnxruntime.InferenceSession(model_path, providers = apply_execution_provider_options(facefusion.globals.execution_device_id, facefusion.globals.execution_providers))
 	return FRAME_PROCESSOR
 
 
@@ -117,7 +115,7 @@ def clear_frame_processor() -> None:
 def get_model_initializer() -> Any:
 	global MODEL_INITIALIZER
 
-	with THREAD_LOCK:
+	with thread_lock():
 		while process_manager.is_checking():
 			sleep(0.5)
 		if MODEL_INITIALIZER is None:
@@ -151,7 +149,7 @@ def set_options(key : Literal['model'], value : Any) -> None:
 
 
 def register_args(program : ArgumentParser) -> None:
-	if platform.system().lower() == 'darwin':
+	if has_execution_provider('CoreMLExecutionProvider') or has_execution_provider('OpenVINOExecutionProvider'):
 		face_swapper_model_fallback = 'inswapper_128'
 	else:
 		face_swapper_model_fallback = 'inswapper_128_fp16'
@@ -263,7 +261,8 @@ def apply_swap(source_face : Face, crop_vision_frame : VisionFrame) -> VisionFra
 				frame_processor_inputs[frame_processor_input.name] = prepare_source_embedding(source_face)
 		if frame_processor_input.name == 'target':
 			frame_processor_inputs[frame_processor_input.name] = crop_vision_frame
-	crop_vision_frame = frame_processor.run(None, frame_processor_inputs)[0][0]
+	with conditional_thread_semaphore(facefusion.globals.execution_providers):
+		crop_vision_frame = frame_processor.run(None, frame_processor_inputs)[0][0]
 	return crop_vision_frame
 
 
