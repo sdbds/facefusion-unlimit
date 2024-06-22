@@ -1,6 +1,5 @@
 $execution_thread_count=128
 $execution_queue_count=8
-$temp_frame_quality=100
 $output_video_quality=100
 $ui_layouts=""
 $max_memory=""
@@ -21,9 +20,8 @@ if ($max_memory) {
 
 python.exe run.py `
 --frame-processor face_swapper face_enhancer `
---keep-fps `
+--open-browser `
 --keep-temp `
 --execution-queue-count=$execution_queue_count `
 --execution-thread-count=$execution_thread_count `
---temp-frame-quality=$temp_frame_quality `
 --output-video-quality=$output_video_quality $ext_args
