@@ -3,3 +3,4 @@
 .jobs
 .idea
 .vscode
+*.pyc
